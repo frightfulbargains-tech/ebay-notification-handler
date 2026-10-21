@@ -1,0 +1,14 @@
+{
+  "name": "ebay-notification-handler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "eBay marketplace account deletion notification handler",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "event-notification-nodejs-sdk": "1.0.3",
+    "express": "^4.21.2"
+  }
+}
