@@ -1,6 +1,8 @@
 const { createHash } = require('crypto');
 const express = require('express');
 const EventNotificationSDK = require('event-notification-nodejs-sdk');
+const accountDeletionProcessor = require('event-notification-nodejs-sdk/lib/processor/accountDeletionMessageProcessor');
+accountDeletionProcessor.process = () => {};
 
 const app = express();
 app.use(express.json());
