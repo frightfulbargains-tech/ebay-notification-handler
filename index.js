@@ -29,34 +29,22 @@ app.get('/webhook', (req, res) => {
         .json({ challengeResponse });
 });
 
+
 app.post('/webhook', async (req, res) => {
-console.log('EBAY WEBHOOK RECEIVED');
+    console.log('EBAY WEBHOOK RECEIVED');
+
     try {
         const statusCode = await EventNotificationSDK.process(
             req.body,
             req.headers['x-ebay-signature'],
-            {
-                PRODUCTION: {
-                    clientId: process.env.EBAY_CLIENT_ID,
-                    clientSecret: process.env.EBAY_CLIENT_SECRET,
-                    devId: process.env.EBAY_DEV_ID,
-                    baseUrl: 'api.ebay.com'
-                },
-                SANDBOX: {
-                    clientId: '',
-                    clientSecret: '',
-                    devId: '',
-                    baseUrl: 'api.sandbox.ebay.com'
-                },
-                endpoint: process.env.EBAY_ENDPOINT,
-                verificationToken: process.env.EBAY_VERIFICATION_TOKEN
-            },
+            config,
             'PRODUCTION'
         );
 
+        console.log('EBAY PROCESSING STATUS:', statusCode);
         return res.sendStatus(statusCode);
     } catch (error) {
-        console.error('Notification processing failed.');
+        console.error('EBAY PROCESSING ERROR:', error.message);
         return res.sendStatus(500);
     }
 });
