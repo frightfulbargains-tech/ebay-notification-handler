@@ -1,3 +1,4 @@
+const { createHash } = require('crypto');
 const express = require('express');
 const EventNotificationSDK = require('event-notification-nodejs-sdk');
 
@@ -10,27 +11,20 @@ app.get('/', (req, res) => {
 
 app.get('/webhook', (req, res) => {
     const challengeCode = req.query.challenge_code;
+    const verificationToken = process.env.EBAY_VERIFICATION_TOKEN;
+    const endpoint = process.env.EBAY_ENDPOINT;
 
-    if (!challengeCode) {
-        return res.status(400).json({ error: 'Missing challenge_code' });
+    if (!challengeCode || !verificationToken || !endpoint) {
+        return res.status(400).json({ error: 'Missing required configuration' });
     }
 
-    try {
-        const result = EventNotificationSDK.validateEndpoint(
-            challengeCode,
-            {
-                endpoint: process.env.EBAY_ENDPOINT,
-                verificationToken: process.env.EBAY_VERIFICATION_TOKEN
-            }
-        );
+    const challengeResponse = createHash('sha256')
+        .update(challengeCode + verificationToken + endpoint, 'utf8')
+        .digest('hex');
 
-        return res.status(200).json({
-            challengeResponse: result.challengeResponse || result
-        });
-    } catch (error) {
-        console.error('Endpoint validation failed.');
-        return res.status(500).send();
-    }
+    return res.status(200)
+        .type('application/json')
+        .json({ challengeResponse });
 });
 
 app.post('/webhook', async (req, res) => {
