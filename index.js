@@ -2,6 +2,22 @@ const { createHash } = require('crypto');
 const express = require('express');
 const EventNotificationSDK = require('event-notification-nodejs-sdk');
 const accountDeletionProcessor = require('event-notification-nodejs-sdk/lib/processor/accountDeletionMessageProcessor');
+const config = {
+    PRODUCTION: {
+        clientId: process.env.EBAY_CLIENT_ID,
+        clientSecret: process.env.EBAY_CLIENT_SECRET,
+        devId: process.env.EBAY_DEV_ID,
+        baseUrl: 'api.ebay.com'
+    },
+    SANDBOX: {
+        clientId: '',
+        clientSecret: '',
+        devId: '',
+        baseUrl: 'api.sandbox.ebay.com'
+    },
+    endpoint: process.env.EBAY_ENDPOINT,
+    verificationToken: process.env.EBAY_VERIFICATION_TOKEN
+};
 accountDeletionProcessor.process = () => {};
 
 const app = express();
