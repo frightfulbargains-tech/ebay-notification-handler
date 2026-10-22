@@ -30,6 +30,7 @@ app.get('/webhook', (req, res) => {
 });
 
 app.post('/webhook', async (req, res) => {
+console.log('EBAY WEBHOOK RECEIVED');
     try {
         const statusCode = await EventNotificationSDK.process(
             req.body,
