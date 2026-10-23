@@ -60,7 +60,7 @@ app.post('/webhook', async (req, res) => {
         console.log('EBAY PROCESSING STATUS:', statusCode);
         return res.sendStatus(statusCode);
     } catch (error) {
-        console.error('EBAY PROCESSING ERROR:', error.message);
+        console.error('EBAY PROCESSING ERROR:', error);
         return res.sendStatus(500);
     }
 });
