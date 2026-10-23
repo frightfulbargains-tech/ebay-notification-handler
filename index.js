@@ -18,7 +18,6 @@ const config = {
     endpoint: process.env.EBAY_ENDPOINT,
     verificationToken: process.env.EBAY_VERIFICATION_TOKEN
 };
-accountDeletionProcessor.process = () => {};
 
 const app = express();
 app.use(express.json());
