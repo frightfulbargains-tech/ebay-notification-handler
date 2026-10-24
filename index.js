@@ -125,96 +125,106 @@ async function findLowestPrices(ean, token) {
     const seenItemIds = new Set();
     const pageSize = 200;
     const maxOffset = 10000;
-    let offset = 0;
 
-    // Browse API sorts by item price, not delivered price. We therefore
-    // inspect postage and compare item + postage before choosing a winner.
-    while (offset < maxOffset) {
-        const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search');
-        url.searchParams.set('gtin', ean);
-        url.searchParams.set('limit', String(pageSize));
-        url.searchParams.set('offset', String(offset));
-        url.searchParams.set('sort', 'price');
-        url.searchParams.set('filter', 'buyingOptions:{FIXED_PRICE}');
+    // Search by structured GTIN AND by keyword. Some sellers do not attach
+    // the EAN to eBay's structured product data, but may include it in text.
+    const searches = [
+        { type: 'gtin', value: ean },
+        { type: 'q', value: ean }
+    ];
 
-        const response = await fetch(url, { headers });
-        if (!response.ok) {
-            throw new Error(`eBay search failed for EAN ${ean} at offset ${offset}: ${response.status}`);
-        }
+    for (const search of searches) {
+        let offset = 0;
 
-        const data = await response.json();
-        const items = data.itemSummaries || [];
-        if (items.length === 0) break;
+        while (offset < maxOffset) {
+            const url = new URL('https://api.ebay.com/buy/browse/v1/item_summary/search');
+            url.searchParams.set(search.type, search.value);
+            url.searchParams.set('limit', String(pageSize));
+            url.searchParams.set('offset', String(offset));
+            url.searchParams.set('sort', 'price');
+            url.searchParams.set('filter', 'buyingOptions:{FIXED_PRICE}');
 
-        // Process in small batches to avoid making hundreds of requests at once.
-        const candidates = items.filter(item => {
-            const label = CONDITION_LABELS[Number(item.conditionId)];
-            const itemId = item.itemId;
-            const price = Number(item.price?.value);
-            if (!label || !itemId || !Number.isFinite(price) || seenItemIds.has(itemId)) {
-                return false;
+            const response = await fetch(url, { headers });
+            if (!response.ok) {
+                // Keep results from the other search method if one method fails.
+                console.error(`eBay ${search.type} search failed for EAN ${ean} at offset ${offset}: ${response.status}`);
+                break;
             }
-            seenItemIds.add(itemId);
 
-            // Since item prices are sorted ascending and postage cannot be
-            // negative, an item price at/above our delivered-price winner cannot beat it.
-            const current = results[label];
-            return !current || price < current.totalPrice;
-        });
+            const data = await response.json();
+            const items = data.itemSummaries || [];
+            if (items.length === 0) break;
 
-        const batchSize = 8;
-        for (let i = 0; i < candidates.length; i += batchSize) {
-            const batch = candidates.slice(i, i + batchSize);
-            await Promise.all(batch.map(async item => {
+            // Process small batches to limit simultaneous detail requests.
+            const candidates = items.filter(item => {
                 const label = CONDITION_LABELS[Number(item.conditionId)];
+                const itemId = item.itemId;
                 const price = Number(item.price?.value);
-                const current = results[label];
-                if (current && price >= current.totalPrice) return;
-
-                try {
-                    const itemResponse = await fetch(
-                        `https://api.ebay.com/buy/browse/v1/item/${encodeURIComponent(item.itemId)}`,
-                        { headers }
-                    );
-                    if (!itemResponse.ok) return;
-
-                    const details = await itemResponse.json();
-                    const shippingOptions = details.shippingOptions || [];
-                    const shippingCosts = shippingOptions
-                        .map(option => {
-                            if (option.shippingCostType === 'FREE') return 0;
-                            const value = option.shippingCost?.value;
-                            return value == null ? null : Number(value);
-                        })
-                        .filter(value => value !== null && Number.isFinite(value) && value >= 0);
-
-                    // Unknown postage is not treated as free.
-                    if (shippingCosts.length === 0) return;
-
-                    const shipping = Math.min(...shippingCosts);
-                    const total = Number((price + shipping).toFixed(2));
-                    const best = results[label];
-                    if (!best || total < best.totalPrice) {
-                        results[label] = {
-                            ean,
-                            condition: label,
-                            itemPrice: price,
-                            postage: shipping,
-                            totalPrice: total,
-                            currency: item.price.currency,
-                            title: item.title,
-                            url: item.itemWebUrl
-                        };
-                    }
-                } catch (error) {
-                    console.error('ITEM DETAIL LOOKUP ERROR:', item.itemId, error.message);
+                if (!label || !itemId || !Number.isFinite(price) || seenItemIds.has(itemId)) {
+                    return false;
                 }
-            }));
-        }
+                seenItemIds.add(itemId);
 
-        offset += items.length;
-        if (items.length < pageSize || (Number.isFinite(data.total) && offset >= data.total)) {
-            break;
+                // With non-negative postage, an item price at/above the
+                // current delivered-price winner cannot improve that winner.
+                const current = results[label];
+                return !current || price < current.totalPrice;
+            });
+
+            const batchSize = 8;
+            for (let i = 0; i < candidates.length; i += batchSize) {
+                const batch = candidates.slice(i, i + batchSize);
+                await Promise.all(batch.map(async item => {
+                    const label = CONDITION_LABELS[Number(item.conditionId)];
+                    const price = Number(item.price?.value);
+                    const current = results[label];
+                    if (current && price >= current.totalPrice) return;
+
+                    try {
+                        const itemResponse = await fetch(
+                            `https://api.ebay.com/buy/browse/v1/item/${encodeURIComponent(item.itemId)}`,
+                            { headers }
+                        );
+                        if (!itemResponse.ok) return;
+
+                        const details = await itemResponse.json();
+                        const shippingOptions = details.shippingOptions || [];
+                        const shippingCosts = shippingOptions
+                            .map(option => {
+                                if (option.shippingCostType === 'FREE') return 0;
+                                const value = option.shippingCost?.value;
+                                return value == null ? null : Number(value);
+                            })
+                            .filter(value => value !== null && Number.isFinite(value) && value >= 0);
+
+                        // Missing postage is unknown, not free.
+                        if (shippingCosts.length === 0) return;
+
+                        const shipping = Math.min(...shippingCosts);
+                        const total = Number((price + shipping).toFixed(2));
+                        const best = results[label];
+                        if (!best || total < best.totalPrice) {
+                            results[label] = {
+                                ean,
+                                condition: label,
+                                itemPrice: price,
+                                postage: shipping,
+                                totalPrice: total,
+                                currency: item.price.currency,
+                                title: item.title,
+                                url: item.itemWebUrl
+                            };
+                        }
+                    } catch (error) {
+                        console.error('ITEM DETAIL LOOKUP ERROR:', item.itemId, error.message);
+                    }
+                }));
+            }
+
+            offset += items.length;
+            if (items.length < pageSize || (Number.isFinite(data.total) && offset >= data.total)) {
+                break;
+            }
         }
     }
 
