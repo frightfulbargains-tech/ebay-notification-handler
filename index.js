@@ -272,6 +272,111 @@ app.post('/prices', async (req, res) => {
     }
 });
 
+
+app.get('/csv', (req, res) => {
+    res.status(200).type('html').send(\`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eBay EAN Price Checker</title>
+<style>
+body{font:16px system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 18px;color:#202124}
+h1{font-size:1.7rem}p{line-height:1.5}form{border:1px solid #ddd;border-radius:12px;padding:22px}
+input,button{font:inherit}input[type=file]{display:block;margin:18px 0}button{background:#185abc;color:#fff;border:0;border-radius:7px;padding:11px 18px;cursor:pointer}button:disabled{opacity:.55;cursor:wait}
+#status{margin-top:18px;white-space:pre-wrap}small{color:#555}
+</style>
+</head>
+<body>
+<h1>eBay EAN Price Checker</h1>
+<p>Upload a CSV with an <strong>EAN</strong> column, or one EAN per row. The first column is used if there is no EAN header. Up to 50 EANs per run.</p>
+<form id="form">
+<label for="file"><strong>Choose input CSV</strong></label>
+<input id="file" type="file" accept=".csv,text/csv" required>
+<button id="run" type="submit">Check prices and download CSV</button>
+<div id="status" role="status" aria-live="polite"></div>
+</form>
+<p><small>Report columns: EAN, Title, Condition, Item Price, Postage, Total Price, Currency, eBay URL.</small></p>
+<script>
+const form = document.getElementById('form');
+const fileInput = document.getElementById('file');
+const runButton = document.getElementById('run');
+const statusBox = document.getElementById('status');
+
+function parseFirstColumn(line) {
+  const match = line.match(/^\\s*(?:"((?:[^"]|"")*)"|([^,]*))/);
+  return (match ? (match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2]) : '').trim();
+}
+function csvCell(value) {
+  const text = value == null ? '' : String(value);
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+function downloadCsv(rows) {
+  const csv = rows.map(row => row.map(csvCell).join(',')).join('\\r\\n') + '\\r\\n';
+  const blob = new Blob(['\\uFEFF', csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'ebay-price-report.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  const file = fileInput.files[0];
+  if (!file) return;
+  runButton.disabled = true;
+  statusBox.textContent = 'Reading EANs…';
+  try {
+    const lines = (await file.text()).replace(/^\\uFEFF/, '').split(/\\r?\\n/).filter(line => line.trim());
+    if (!lines.length) throw new Error('The file is empty.');
+    let eans = lines.map(parseFirstColumn);
+    if (/^ean$/i.test(eans[0])) eans.shift();
+    eans = [...new Set(eans.filter(Boolean))];
+    if (!eans.length) throw new Error('No EANs found in the first column.');
+    if (eans.length > 50) throw new Error('This checker accepts up to 50 unique EANs per run.');
+    const invalid = eans.find(ean => !/^\\d{8,14}$/.test(ean));
+    if (invalid) throw new Error('Invalid EAN "' + invalid + '". EANs must contain 8–14 digits.');
+    statusBox.textContent = 'Checking ' + eans.length + ' EAN(s). This may take a while…';
+    const response = await fetch('/prices', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({eans})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Price lookup failed.');
+    const rows = [['EAN','Title','Condition','Item Price','Postage','Total Price','Currency','eBay URL']];
+    const conditions = ['New','Like New','Very Good','Good','Acceptable'];
+    for (const ean of eans) {
+      for (const condition of conditions) {
+        const item = data[ean] && data[ean][condition];
+        rows.push([
+          ean,
+          item ? item.title : '',
+          condition,
+          item ? item.itemPrice : '',
+          item ? item.postage : '',
+          item ? item.totalPrice : '',
+          item ? item.currency : '',
+          item ? item.url : ''
+        ]);
+      }
+    }
+    downloadCsv(rows);
+    statusBox.textContent = 'Finished. Downloaded a report with ' + (rows.length - 1) + ' condition rows for ' + eans.length + ' EAN(s).';
+  } catch (error) {
+    statusBox.textContent = 'Error: ' + error.message;
+  } finally {
+    runButton.disabled = false;
+  }
+});
+</script>
+</body>
+</html>\`);
+});
+
 const port = process.env.PORT || 10000;
 app.listen(port, () => {
     console.log('Notification service started.');
