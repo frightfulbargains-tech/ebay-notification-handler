@@ -274,7 +274,7 @@ app.post('/prices', async (req, res) => {
 
 
 app.get('/csv', (req, res) => {
-    res.status(200).type('html').send(`<!doctype html>
+    res.status(200).type('html').send(String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
