@@ -274,7 +274,7 @@ app.post('/prices', async (req, res) => {
 
 
 app.get('/csv', (req, res) => {
-    res.status(200).type('html').send(\`<!doctype html>
+    res.status(200).type('html').send(`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -304,7 +304,7 @@ const runButton = document.getElementById('run');
 const statusBox = document.getElementById('status');
 
 function parseFirstColumn(line) {
-  const match = line.match(/^\\s*(?:"((?:[^"]|"")*)"|([^,]*))/);
+  const match = line.match(/^\s*(?:"((?:[^"]|"")*)"|([^,]*))/);
   return (match ? (match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2]) : '').trim();
 }
 function csvCell(value) {
@@ -312,8 +312,8 @@ function csvCell(value) {
   return '"' + text.replace(/"/g, '""') + '"';
 }
 function downloadCsv(rows) {
-  const csv = rows.map(row => row.map(csvCell).join(',')).join('\\r\\n') + '\\r\\n';
-  const blob = new Blob(['\\uFEFF', csv], {type:'text/csv;charset=utf-8;'});
+  const csv = rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+  const blob = new Blob(['\uFEFF', csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -330,14 +330,14 @@ form.addEventListener('submit', async event => {
   runButton.disabled = true;
   statusBox.textContent = 'Reading EANs…';
   try {
-    const lines = (await file.text()).replace(/^\\uFEFF/, '').split(/\\r?\\n/).filter(line => line.trim());
+    const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
     if (!lines.length) throw new Error('The file is empty.');
     let eans = lines.map(parseFirstColumn);
     if (/^ean$/i.test(eans[0])) eans.shift();
     eans = [...new Set(eans.filter(Boolean))];
     if (!eans.length) throw new Error('No EANs found in the first column.');
     if (eans.length > 50) throw new Error('This checker accepts up to 50 unique EANs per run.');
-    const invalid = eans.find(ean => !/^\\d{8,14}$/.test(ean));
+    const invalid = eans.find(ean => !/^\d{8,14}$/.test(ean));
     if (invalid) throw new Error('Invalid EAN "' + invalid + '". EANs must contain 8–14 digits.');
     statusBox.textContent = 'Checking ' + eans.length + ' EAN(s). This may take a while…';
     const response = await fetch('/prices', {
@@ -374,7 +374,7 @@ form.addEventListener('submit', async event => {
 });
 </script>
 </body>
-</html>\`);
+</html>`);
 });
 
 const port = process.env.PORT || 10000;
